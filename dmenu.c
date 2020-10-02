@@ -136,10 +136,11 @@ drawitem(struct item *item, int x, int y, int w)
 static void
 drawmenu(void)
 {
-	unsigned int curpos;
+	static int curpos, oldcurlen;
 	struct item *item;
 	int x = 0, y = 0, w;
- char *censort;
+	char *censort;
+	int curlen, rcurlen;
 
 	drw_setscheme(drw, scheme[SchemeNorm]);
 	drw_rect(drw, 0, 0, mw, mh, 1, 1);
@@ -150,18 +151,27 @@ drawmenu(void)
 	}
 	/* draw input field */
 	w = (lines > 0 || !matches) ? mw - x : inputw;
-	drw_setscheme(drw, scheme[SchemeNorm]);
 	if (passwd) {
-	        censort = ecalloc(1, sizeof(text));
+		drw_setscheme(drw, scheme[SchemeNorm]);
+		censort = ecalloc(1, sizeof(text));
 		memset(censort, '.', strlen(text));
 		drw_text(drw, x, 0, w, bh, lrpad / 2, censort, 0);
 		free(censort);
-	} else drw_text(drw, x, 0, w, bh, lrpad / 2, text, 0);
+	} else {
+		w -= lrpad / 2;
+		x += lrpad / 2;
+		rcurlen = drw_fontset_getwidth(drw, text + cursor);
+		curlen = drw_fontset_getwidth(drw, text) - rcurlen;
+		curpos += curlen - oldcurlen;
+		curpos = MIN(w, MAX(0, curpos));
+		curpos = MAX(curpos, w - rcurlen);
+		curpos = MIN(curpos, curlen);
+		oldcurlen = curlen;
 
-	curpos = TEXTW(text) - TEXTW(&text[cursor]);
-	if ((curpos += lrpad / 2 - 1) < w) {
 		drw_setscheme(drw, scheme[SchemeNorm]);
-		drw_rect(drw, x + curpos, 2, 2, bh - 4, 1, 0);
+		drw_text_align(drw, x, 0, curpos, bh, text, cursor, AlignR);
+		drw_text_align(drw, x + curpos, 0, w - curpos, bh, text + cursor, strlen(text) - cursor, AlignL);
+		drw_rect(drw, x + curpos - 1, 2, 2, bh - 4, 1, 0);
 	}
 
 	if (lines > 0) {
@@ -838,7 +848,7 @@ setup(void)
 	}
 	for (j = 0; j < SchemeOut; ++j) {
 		for (i = 0; i < 2; ++i)
-			free(colors[j][i]);
+			free((char*)colors[j][i]);
 	}
 
 	clip = XInternAtom(dpy, "CLIPBOARD",   False);
@@ -871,7 +881,7 @@ setup(void)
 		/* no focused window is on screen, so use pointer location instead */
 		if (mon < 0 && !area && XQueryPointer(dpy, root, &dw, &dw, &x, &y, &di, &di, &du))
 			for (i = 0; i < n; i++)
-				if (INTERSECT(x, y, 1, 1, info[i]))
+				if (INTERSECT(x, y, 1, 1, info[i]) != 0)
 					break;
 
 		x = info[i].x_org;
@@ -1049,7 +1059,7 @@ main(int argc, char *argv[])
 	if (!drw_fontset_create(drw, (const char**)fonts, LENGTH(fonts)))
 		die("no fonts could be loaded.");
 
-	free(fonts[0]);
+	free((char*)fonts[0]);
 	lrpad = drw->fonts->h;
 
 #ifdef __OpenBSD__
